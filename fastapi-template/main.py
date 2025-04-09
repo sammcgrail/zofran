@@ -82,7 +82,7 @@ async def websocket_endpoint(websocket: WebSocket):
     try:
         while True:
             data = await websocket.receive_text()
-            # Broadcast the message (including username) to all clients
+            # Broadcast the data (chat or drawing) to all clients
             await manager.broadcast(data)
     except WebSocketDisconnect:
         manager.disconnect(websocket)
