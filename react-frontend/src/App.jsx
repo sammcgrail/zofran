@@ -27,30 +27,62 @@ function App() {
   const gameCanvasRef = useRef(null); // Game canvas reference
   const isDrawing = useRef(false); // Track drawing state
   const messagesEndRef = useRef(null); // Ref to scroll to the latest message
-  const [planes, setPlanes] = useState({}); // Store planes' positions
+  const [spaceships, setSpaceships] = useState({}); // Store spaceships' positions
+  const [counter, setCounter] = useState(0); // Multiplayer counter state
+  const starfieldAnimationRef = useRef(null); // Ref to track starfield animation frame
 
   useEffect(() => {
-    const websocket = new WebSocket("ws://localhost:5000/ws");
+    let websocket;
+    let reconnectTimeout;
 
-    websocket.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === "draw") {
-        drawOnCanvas(data.x, data.y, data.prevX, data.prevY, data.color);
-      } else if (data.type === "chat") {
-        setMessages((prev) => [...prev, data]);
-      } else if (data.type === "plane_update") {
-        setPlanes(data.planes);
-      }
+    const connectWebSocket = () => {
+      websocket = new WebSocket("ws://localhost:5000/ws");
+
+      websocket.onopen = () => {
+        console.log("WebSocket connection established");
+        setWs(websocket);
+
+        // Request the current spaceship state once the connection is open
+        websocket.send(JSON.stringify({ type: "request_spaceships" }));
+      };
+
+      websocket.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === "draw") {
+          drawOnCanvas(data.x, data.y, data.prevX, data.prevY, data.color);
+        } else if (data.type === "drawing_history") {
+          batchDrawOnCanvas(data.history);
+        } else if (data.type === "chat") {
+          setMessages((prev) => {
+            // Avoid adding duplicate messages
+            if (prev.length && prev[prev.length - 1].message === data.message && prev[prev.length - 1].username === data.username) {
+              return prev;
+            }
+            return [...prev, data];
+          });
+        } else if (data.type === "spaceship_update") {
+          setSpaceships(data.spaceships);
+        } else if (data.type === "counter_update") {
+          setCounter(data.value);
+        }
+      };
+
+      websocket.onclose = () => {
+        console.log("WebSocket connection closed. Attempting to reconnect...");
+        reconnectTimeout = setTimeout(connectWebSocket, 3000); // Retry connection after 3 seconds
+      };
+
+      websocket.onerror = (error) => {
+        console.error("WebSocket error:", error);
+        websocket.close();
+      };
     };
 
-    websocket.onclose = () => {
-      console.log("WebSocket connection closed");
-    };
-
-    setWs(websocket);
+    connectWebSocket();
 
     return () => {
-      websocket.close(); // Cleanup WebSocket connection on component unmount
+      clearTimeout(reconnectTimeout);
+      if (websocket) websocket.close();
     };
   }, []);
 
@@ -60,19 +92,31 @@ function App() {
   }, [messages]);
 
   useEffect(() => {
-    const canvas = gameCanvasRef.current;
-    const ctx = canvas.getContext("2d");
+    const gameCanvas = gameCanvasRef.current;
+    const gameCtx = gameCanvas.getContext("2d");
 
-    const renderPlanes = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas
-      Object.values(planes).forEach((plane) => {
-        ctx.fillStyle = plane.username === username ? "blue" : "red"; // Blue for self, red for others
-        ctx.fillRect(plane.x, plane.y, 20, 20); // Draw plane as a rectangle
+    const renderSpaceships = () => {
+      gameCtx.clearRect(0, 0, gameCanvas.width, gameCanvas.height); // Clear canvas
+
+      // Draw spaceships
+      Object.values(spaceships).forEach((spaceship) => {
+        gameCtx.fillStyle = spaceship.username === username ? "blue" : "red"; // Blue for self, red for others
+        gameCtx.fillRect(spaceship.x, spaceship.y, 20, 20); // Draw spaceship as a rectangle
       });
     };
 
-    renderPlanes();
-  }, [planes]);
+    const renderGame = () => {
+      renderSpaceships();
+      requestAnimationFrame(renderGame); // Continuously render spaceships
+    };
+
+    renderGame();
+
+    return () => {
+      // Cancel the animation frame on cleanup
+      cancelAnimationFrame(starfieldAnimationRef.current);
+    };
+  }, [spaceships]); // Re-render when spaceships change
 
   const drawOnCanvas = (x, y, prevX, prevY, color = "black") => {
     const canvas = canvasRef.current;
@@ -86,6 +130,22 @@ function App() {
     ctx.closePath();
   };
 
+  const batchDrawOnCanvas = (history) => {
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    ctx.strokeStyle = "black";
+    ctx.lineWidth = 2;
+
+    history.forEach(({ x, y, prevX, prevY, color }) => {
+      ctx.strokeStyle = color || "black";
+      ctx.beginPath();
+      ctx.moveTo(prevX, prevY);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+      ctx.closePath();
+    });
+  };
+
   const handleMouseDown = () => {
     isDrawing.current = true;
   };
@@ -95,7 +155,7 @@ function App() {
   };
 
   const handleMouseMove = (e) => {
-    if (!isDrawing.current || !ws) return;
+    if (!isDrawing.current) return;
 
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
@@ -109,38 +169,39 @@ function App() {
     drawOnCanvas(x, y, prevX, prevY);
 
     // Send drawing data to the server
-    ws.send(
-      JSON.stringify({
-        type: "draw",
-        x,
-        y,
-        prevX,
-        prevY,
-        color: "black",
-        username,
-      })
-    );
+    sendMessage({
+      type: "draw",
+      x,
+      y,
+      prevX,
+      prevY,
+      color: "black",
+      username,
+    });
+  };
+
+  const sendMessage = (message) => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(message));
+    } else {
+      console.error("WebSocket is not open. Message not sent:", message);
+    }
   };
 
   const handleChatSubmit = (e) => {
     e.preventDefault();
-    if (!message.trim() || !ws) return;
+    if (!message.trim()) return;
 
-    // Send chat message to the server
-    ws.send(
-      JSON.stringify({
-        type: "chat",
-        message,
-        username,
-      })
-    );
+    // Prevent duplicate messages
+    const trimmedMessage = message.trim();
+    if (messages.length && messages[messages.length - 1].message === trimmedMessage) return;
+
+    sendMessage({ type: "chat", message: trimmedMessage, username });
     setMessage(""); // Clear the input field
   };
 
   const handleKeyDown = (e) => {
-    if (!ws) return;
-
-    const movement = { username, type: "plane_update" };
+    const movement = { username, type: "spaceship_update" };
 
     switch (e.key) {
       case "w":
@@ -171,7 +232,11 @@ function App() {
         return;
     }
 
-    ws.send(JSON.stringify(movement));
+    sendMessage(movement);
+  };
+
+  const handleIncrementCounter = () => {
+    sendMessage({ type: "counter_increment" });
   };
 
   return (
@@ -260,9 +325,10 @@ function App() {
             border: "1px solid #ccc",
             borderRadius: "8px",
             position: "relative",
+            backgroundColor: "#f5f5f5", // Lighter grey background
           }}
         >
-          <Typography variant="h5" gutterBottom sx={{ textAlign: "center" }}>
+          <Typography variant="h5" gutterBottom sx={{ textAlign: "center", color: "#333" }}>
             Collaborative Drawing Canvas
           </Typography>
           <canvas
@@ -276,7 +342,7 @@ function App() {
           />
         </Box>
 
-        {/* Multiplayer Plane Game Section */}
+        {/* Multiplayer Spaceship Game Section */}
         <Box
           sx={{
             width: "35%",
@@ -284,19 +350,46 @@ function App() {
             border: "1px solid #ccc",
             borderRadius: "8px",
             position: "relative",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "space-between",
           }}
           tabIndex={0} // Make the box focusable to capture key events
           onKeyDown={handleKeyDown}
         >
           <Typography variant="h5" gutterBottom sx={{ textAlign: "center" }}>
-            Multiplayer Plane Game
+            Multiplayer Spaceship Game
           </Typography>
           <canvas
             ref={gameCanvasRef}
             width={800}
-            height={600}
-            style={{ width: "100%", height: "90%" }}
+            height={500}
+            style={{ width: "100%", height: "75%" }}
           />
+          {/* Multiplayer Counter Section */}
+          <Box
+            sx={{
+              width: "100%",
+              height: "20%",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              borderTop: "1px solid #ccc",
+              padding: 2,
+            }}
+          >
+            <Typography variant="h6" gutterBottom>
+              Multiplayer Counter: {counter}
+            </Typography>
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={handleIncrementCounter}
+            >
+              Increment Counter
+            </Button>
+          </Box>
         </Box>
       </Container>
     </ThemeProvider>

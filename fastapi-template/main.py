@@ -16,30 +16,25 @@ app.add_middleware(
 
 messages_list: dict[int, MsgPayload] = {}
 counter = {"value": 0}  # Counter state
+drawing_history = []  # Store drawing actions
 
 class ConnectionManager:
     def __init__(self):
-        self.active_connections: list[WebSocket] = []
+        self.active_connections: set[WebSocket] = set()  # Use a set for faster operations
 
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
-        self.active_connections.append(websocket)
+        self.active_connections.add(websocket)
 
     def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
+        self.active_connections.discard(websocket)  # Use discard to avoid KeyError
 
     async def broadcast(self, message: str):
-        disconnected_clients = []
-        for connection in self.active_connections:
+        for connection in list(self.active_connections):  # Convert to list to avoid modification during iteration
             try:
                 await connection.send_text(message)
             except Exception:
-                # Mark the client as disconnected
-                disconnected_clients.append(connection)
-        
-        # Remove disconnected clients from the active connections list
-        for client in disconnected_clients:
-            self.disconnect(client)
+                self.disconnect(connection)  # Remove disconnected clients
 
 manager = ConnectionManager()
 
@@ -86,43 +81,54 @@ def increment_counter() -> dict[str, int]:
     return {"value": counter["value"]}
 
 
-planes = {}  # Store planes' positions
+spaceships = {}  # Store spaceships' positions
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     try:
+        # Send initial state to the newly connected client
+        await websocket.send_text(json.dumps({"type": "counter_update", "value": counter["value"]}))
+        if drawing_history:
+            await websocket.send_text(json.dumps({"type": "drawing_history", "history": drawing_history}))
+        if spaceships:
+            await websocket.send_text(json.dumps({"type": "spaceship_update", "spaceships": spaceships}))
+
         while True:
             data = await websocket.receive_text()
             data = json.loads(data)
 
-            if data["type"] == "plane_update":
+            if data["type"] == "spaceship_update":
                 username = data["username"]
-                if username not in planes:
-                    planes[username] = {"x": 400, "y": 300, "username": username}  # Initialize plane position
+                spaceships.setdefault(username, {"x": 400, "y": 300, "username": username})  # Initialize if not exists
 
                 if data["direction"] == "up":
-                    planes[username]["y"] -= 10
+                    spaceships[username]["y"] -= 10
                 elif data["direction"] == "down":
-                    planes[username]["y"] += 10
+                    spaceships[username]["y"] += 10
                 elif data["direction"] == "left":
-                    planes[username]["x"] -= 10
+                    spaceships[username]["x"] -= 10
                 elif data["direction"] == "right":
-                    planes[username]["x"] += 10
+                    spaceships[username]["x"] += 10
 
-                # Broadcast updated planes to all clients
-                await manager.broadcast(json.dumps({"type": "plane_update", "planes": planes}))
-            else:
-                # Broadcast other data (chat or drawing)
+                await manager.broadcast(json.dumps({"type": "spaceship_update", "spaceships": spaceships}))
+            elif data["type"] == "counter_increment":
+                counter["value"] += 1
+                await manager.broadcast(json.dumps({"type": "counter_update", "value": counter["value"]}))
+            elif data["type"] == "draw":
+                drawing_history.append(data)
+                await manager.broadcast(json.dumps(data))
+            elif data["type"] == "chat":
+                # Broadcast chat messages
                 await manager.broadcast(json.dumps(data))
     except WebSocketDisconnect:
         manager.disconnect(websocket)
-        # Remove the disconnected user's plane
+        # Remove the disconnected user's spaceship
         username_to_remove = None
-        for username, plane in list(planes.items()):
-            if plane["username"] == websocket.client:
+        for username, spaceship in list(spaceships.items()):
+            if username == websocket.client.host:  # Match the username with the client's host
                 username_to_remove = username
                 break
         if username_to_remove:
-            del planes[username_to_remove]
-        await manager.broadcast(json.dumps({"type": "plane_update", "planes": planes}))
+            del spaceships[username_to_remove]
+        await manager.broadcast(json.dumps({"type": "spaceship_update", "spaceships": spaceships}))
