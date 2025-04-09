@@ -12,7 +12,7 @@ html {
   justify-content: center;
   align-items: center;
   height: 100%;
-  background-color: #f9f9f9;
+  /* background-color: #f9f9f9; */
 }
 
 /* Centered container */
@@ -26,8 +26,7 @@ html {
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
-/* Input and button styles */
-input[type="text"] {
+Input and button styles input[type="text"] {
   width: 100%;
   padding: 10px;
   margin-bottom: 10px;
@@ -69,4 +68,31 @@ button:hover {
 .previous-messages li {
   padding: 5px 0;
   border-bottom: 1px solid #ccc;
+}
+
+@keyframes sparkle {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 rgba(255, 255, 0, 0);
+  }
+  50% {
+    transform: scale(1.5);
+    box-shadow: 0 0 30px rgba(255, 255, 0, 1), 0 0 60px rgba(255, 165, 0, 0.8);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 rgba(255, 255, 0, 0);
+  }
+}
+
+button.sparkle-button {
+  animation: sparkle 0.7s ease-in-out !important; /* Ensure animation is applied */
+  transition: transform 0.2s !important;
+  position: relative !important;
+  z-index: 1 !important;
+  overflow: visible !important;
+  background-color: #ffeb3b !important; /* Ensure the sparkle effect is visible */
+  color: #000 !important; /* Ensure text is readable during sparkle */
+  border: none !important; /* Prevent default button styles from interfering */
+  box-shadow: 0 0 10px rgba(255, 255, 0, 0.8) !important; /* Add a glow effect */
 }

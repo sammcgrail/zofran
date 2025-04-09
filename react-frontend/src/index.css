@@ -6,4 +6,5 @@ html,
   padding: 0;
   height: 100%;
   font-family: "Roboto", "Helvetica", "Arial", sans-serif;
+  overflow: hidden; /* Hide scrollbars */
 }

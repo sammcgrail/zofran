@@ -11,6 +11,7 @@ import {
   CssBaseline,
 } from "@mui/material";
 import { createTheme, ThemeProvider } from "@mui/material/styles";
+import './App.css';
 
 const darkTheme = createTheme({
   palette: {
@@ -30,6 +31,7 @@ function App() {
   const [spaceships, setSpaceships] = useState({}); // Store spaceships' positions
   const [counter, setCounter] = useState(0); // Multiplayer counter state
   const starfieldAnimationRef = useRef(null); // Ref to track starfield animation frame
+  const [isSparkling, setIsSparkling] = useState(false);
 
   useEffect(() => {
     let websocket;
@@ -237,6 +239,8 @@ function App() {
 
   const handleIncrementCounter = () => {
     sendMessage({ type: "counter_increment" });
+    setIsSparkling(true);
+    setTimeout(() => setIsSparkling(false), 700); // Match the animation duration
   };
 
   return (
@@ -386,6 +390,7 @@ function App() {
               variant="contained"
               color="primary"
               onClick={handleIncrementCounter}
+              className={isSparkling ? "sparkle-button" : ""}
             >
               Increment Counter
             </Button>
