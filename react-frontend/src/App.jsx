@@ -24,8 +24,10 @@ function App() {
   const [messages, setMessages] = useState([]); // Store chat messages
   const [ws, setWs] = useState(null); // WebSocket instance
   const canvasRef = useRef(null); // Canvas reference
+  const gameCanvasRef = useRef(null); // Game canvas reference
   const isDrawing = useRef(false); // Track drawing state
   const messagesEndRef = useRef(null); // Ref to scroll to the latest message
+  const [planes, setPlanes] = useState({}); // Store planes' positions
 
   useEffect(() => {
     const websocket = new WebSocket("ws://localhost:5000/ws");
@@ -36,6 +38,8 @@ function App() {
         drawOnCanvas(data.x, data.y, data.prevX, data.prevY, data.color);
       } else if (data.type === "chat") {
         setMessages((prev) => [...prev, data]);
+      } else if (data.type === "plane_update") {
+        setPlanes(data.planes);
       }
     };
 
@@ -54,6 +58,21 @@ function App() {
     // Scroll to the latest message
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    const canvas = gameCanvasRef.current;
+    const ctx = canvas.getContext("2d");
+
+    const renderPlanes = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas
+      Object.values(planes).forEach((plane) => {
+        ctx.fillStyle = plane.username === username ? "blue" : "red"; // Blue for self, red for others
+        ctx.fillRect(plane.x, plane.y, 20, 20); // Draw plane as a rectangle
+      });
+    };
+
+    renderPlanes();
+  }, [planes]);
 
   const drawOnCanvas = (x, y, prevX, prevY, color = "black") => {
     const canvas = canvasRef.current;
@@ -118,11 +137,48 @@ function App() {
     setMessage(""); // Clear the input field
   };
 
+  const handleKeyDown = (e) => {
+    if (!ws) return;
+
+    const movement = { username, type: "plane_update" };
+
+    switch (e.key) {
+      case "w":
+        movement.direction = "up";
+        break;
+      case "s":
+        movement.direction = "down";
+        break;
+      case "a":
+        movement.direction = "left";
+        break;
+      case "d":
+        movement.direction = "right";
+        break;
+      case "ArrowUp":
+        movement.direction = "up";
+        break;
+      case "ArrowDown":
+        movement.direction = "down";
+        break;
+      case "ArrowLeft":
+        movement.direction = "left";
+        break;
+      case "ArrowRight":
+        movement.direction = "right";
+        break;
+      default:
+        return;
+    }
+
+    ws.send(JSON.stringify(movement));
+  };
+
   return (
     <ThemeProvider theme={darkTheme}>
       <CssBaseline />
       <Container
-        maxWidth="lg"
+        maxWidth="xl"
         sx={{
           display: "flex",
           flexDirection: "row",
@@ -135,7 +191,7 @@ function App() {
         {/* Chat Section */}
         <Box
           sx={{
-            width: "30%",
+            width: "25%",
             height: "100%",
             display: "flex",
             flexDirection: "column",
@@ -199,7 +255,7 @@ function App() {
         {/* Drawing Canvas Section */}
         <Box
           sx={{
-            width: "65%",
+            width: "35%",
             height: "100%",
             border: "1px solid #ccc",
             borderRadius: "8px",
@@ -217,6 +273,29 @@ function App() {
             onMouseDown={handleMouseDown}
             onMouseUp={handleMouseUp}
             onMouseMove={handleMouseMove}
+          />
+        </Box>
+
+        {/* Multiplayer Plane Game Section */}
+        <Box
+          sx={{
+            width: "35%",
+            height: "100%",
+            border: "1px solid #ccc",
+            borderRadius: "8px",
+            position: "relative",
+          }}
+          tabIndex={0} // Make the box focusable to capture key events
+          onKeyDown={handleKeyDown}
+        >
+          <Typography variant="h5" gutterBottom sx={{ textAlign: "center" }}>
+            Multiplayer Plane Game
+          </Typography>
+          <canvas
+            ref={gameCanvasRef}
+            width={800}
+            height={600}
+            style={{ width: "100%", height: "90%" }}
           />
         </Box>
       </Container>

@@ -1,6 +1,7 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from models import MsgPayload
+import json
 
 app = FastAPI()
 
@@ -28,8 +29,17 @@ class ConnectionManager:
         self.active_connections.remove(websocket)
 
     async def broadcast(self, message: str):
+        disconnected_clients = []
         for connection in self.active_connections:
-            await connection.send_text(message)
+            try:
+                await connection.send_text(message)
+            except Exception:
+                # Mark the client as disconnected
+                disconnected_clients.append(connection)
+        
+        # Remove disconnected clients from the active connections list
+        for client in disconnected_clients:
+            self.disconnect(client)
 
 manager = ConnectionManager()
 
@@ -76,13 +86,43 @@ def increment_counter() -> dict[str, int]:
     return {"value": counter["value"]}
 
 
+planes = {}  # Store planes' positions
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     try:
         while True:
             data = await websocket.receive_text()
-            # Broadcast the data (chat or drawing) to all clients
-            await manager.broadcast(data)
+            data = json.loads(data)
+
+            if data["type"] == "plane_update":
+                username = data["username"]
+                if username not in planes:
+                    planes[username] = {"x": 400, "y": 300, "username": username}  # Initialize plane position
+
+                if data["direction"] == "up":
+                    planes[username]["y"] -= 10
+                elif data["direction"] == "down":
+                    planes[username]["y"] += 10
+                elif data["direction"] == "left":
+                    planes[username]["x"] -= 10
+                elif data["direction"] == "right":
+                    planes[username]["x"] += 10
+
+                # Broadcast updated planes to all clients
+                await manager.broadcast(json.dumps({"type": "plane_update", "planes": planes}))
+            else:
+                # Broadcast other data (chat or drawing)
+                await manager.broadcast(json.dumps(data))
     except WebSocketDisconnect:
         manager.disconnect(websocket)
+        # Remove the disconnected user's plane
+        username_to_remove = None
+        for username, plane in list(planes.items()):
+            if plane["username"] == websocket.client:
+                username_to_remove = username
+                break
+        if username_to_remove:
+            del planes[username_to_remove]
+        await manager.broadcast(json.dumps({"type": "plane_update", "planes": planes}))
