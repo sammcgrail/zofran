@@ -1,0 +1,72 @@
+/* Reset and base styles */
+body,
+html {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: Arial, sans-serif;
+}
+
+#root {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  background-color: #f9f9f9;
+}
+
+/* Centered container */
+.container {
+  width: 100%;
+  max-width: 400px;
+  text-align: center;
+  background: #ffffff;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* Input and button styles */
+input[type="text"] {
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+button {
+  width: 100%;
+  padding: 10px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+button:hover {
+  background-color: #0056b3;
+}
+
+/* Previous messages list */
+.previous-messages {
+  margin-top: 20px;
+  text-align: left;
+}
+
+.previous-messages h2 {
+  margin-bottom: 10px;
+}
+
+.previous-messages ul {
+  list-style-type: none;
+  padding: 0;
+}
+
+.previous-messages li {
+  padding: 5px 0;
+  border-bottom: 1px solid #ccc;
+}
