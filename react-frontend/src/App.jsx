@@ -19,7 +19,7 @@ const darkTheme = createTheme({
 });
 
 function App() {
-  const [username] = useState(() => Math.floor(Math.random() * 10000).toString()); // Random numeric username
+  const [username] = useState(() => `John${Math.floor(Math.random() * 1000)}`); // Random "John" variation username
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]); // Store chat messages
   const [ws, setWs] = useState(null); // WebSocket instance
