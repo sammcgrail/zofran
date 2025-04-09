@@ -25,6 +25,7 @@ function App() {
   const [ws, setWs] = useState(null); // WebSocket instance
   const canvasRef = useRef(null); // Canvas reference
   const isDrawing = useRef(false); // Track drawing state
+  const messagesEndRef = useRef(null); // Ref to scroll to the latest message
 
   useEffect(() => {
     const websocket = new WebSocket("ws://localhost:5000/ws");
@@ -48,6 +49,11 @@ function App() {
       websocket.close(); // Cleanup WebSocket connection on component unmount
     };
   }, []);
+
+  useEffect(() => {
+    // Scroll to the latest message
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   const drawOnCanvas = (x, y, prevX, prevY, color = "black") => {
     const canvas = canvasRef.current;
@@ -136,7 +142,7 @@ function App() {
             border: "1px solid #ccc",
             borderRadius: "8px",
             padding: 2,
-            overflowY: "auto",
+            overflow: "hidden", // Prevent overflow
           }}
         >
           <Typography variant="h5" gutterBottom>
@@ -163,13 +169,31 @@ function App() {
               Send
             </Button>
           </Box>
-          <List>
-            {messages.map((msg, index) => (
-              <ListItem key={index} divider>
-                <ListItemText primary={`${msg.username}: ${msg.message}`} />
-              </ListItem>
-            ))}
-          </List>
+          <Box
+            sx={{
+              flex: 1, // Take up remaining space
+              overflowY: "auto", // Enable vertical scrolling
+            }}
+          >
+            <List>
+              {messages.map((msg, index) => (
+                <ListItem
+                  key={index}
+                  divider
+                  sx={{
+                    backgroundColor: msg.username === username ? "#333" : "#444", // Darker grey for all messages
+                    color: msg.username === username ? "#fff" : "#ffeb3b", // White for self, yellow for others
+                    borderRadius: "8px",
+                    marginBottom: "8px",
+                    padding: "8px",
+                  }}
+                >
+                  <ListItemText primary={`${msg.username}: ${msg.message}`} />
+                </ListItem>
+              ))}
+              <div ref={messagesEndRef} /> {/* Scroll target */}
+            </List>
+          </Box>
         </Box>
 
         {/* Drawing Canvas Section */}
